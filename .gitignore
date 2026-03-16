@@ -7,3 +7,4 @@ dist/
 *.egg-info/
 .hatch/
 .pytest_cache
+.versions/
