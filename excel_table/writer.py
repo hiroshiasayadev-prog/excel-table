@@ -337,8 +337,9 @@ def _write_table2d(
     # ------------------------------------------------------------------
     # Write 2×2 blank merge
     # ------------------------------------------------------------------
+    blank_props = _border_props(top=THICK, bottom=THICK, left=THICK, right=THICK)
     ws.merge_range(r + blank_r, c + blank_c,
-                   r + blank_r + 1, c + blank_c + 1, None)
+                   r + blank_r + 1, c + blank_c + 1, None, cache.get(blank_props))
 
     # ------------------------------------------------------------------
     # Write column_label (merged across n_c cols)
