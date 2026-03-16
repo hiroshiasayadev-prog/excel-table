@@ -1,0 +1,16 @@
+site_name: excel-table
+
+theme:
+  name: material
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: ["."]
+          options:
+            show_root_heading: true
+            show_source: false
+            filters:
+              - "!^_"
