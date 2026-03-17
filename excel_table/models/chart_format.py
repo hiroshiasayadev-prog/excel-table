@@ -55,7 +55,8 @@ class LineSeriesConfig(BaseModel):
     Attributes:
         label: Series label shown in the chart legend.
         source_block: Title of the :class:`~excel_table.models.table_base.Table2D`
-            this series reads from. Titles must be unique within a sheet.
+            this series reads from. Must reference a table in the same row
+            of :class:`~excel_table.writer.SheetWriteSchema`.
         style: Rendering style.
 
             - ``"line"``    — line only, no markers
@@ -103,11 +104,13 @@ class ChartConfig(BaseModel):
     from separate tables to be overlaid in a single chart.
 
     .. note::
-        Each ``source_block`` value in ``series`` must reference a title that
-        is unique within the sheet. Duplicate titles cause a ``ValueError`` at
-        chart render time. Within a single :class:`ChartConfig`, duplicate
-        ``source_block`` values across series entries are also rejected at
-        model construction time.
+        Each ``source_block`` value in ``series`` must reference a table in
+        the **same row** of :class:`~excel_table.writer.SheetWriteSchema`.
+        Cross-row references raise a ``ValueError`` at render time because
+        only same-row tables are passed to
+        :func:`~excel_table.chart.render_chart`. Within a single
+        :class:`ChartConfig`, duplicate ``source_block`` values across series
+        entries are rejected at model construction time.
 
     Attributes:
         chart_type: Excel chart type: ``"line"``, ``"scatter"``, or ``"bar"``.

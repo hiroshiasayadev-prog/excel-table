@@ -19,8 +19,8 @@ from __future__ import annotations
 
 import pytest
 
-from excel_table.models.table import Table2DFloat
-from excel_table.models.format import (
+from excel_table.models.table_typed import Table2DFloat
+from excel_table.models.chart_format import (
     ColorScale,
     FormattedTable2D,
     LineSeriesConfig,

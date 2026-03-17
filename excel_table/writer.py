@@ -69,7 +69,8 @@ class SheetWriteSchema:
     Raises:
         ValueError: At construction time if ``rows`` is empty, if row lengths
             differ, or if any column position has inconsistent item types
-            across rows.
+            across rows, or if any table title is duplicated within the same
+            row.
 
     Attributes:
         rows: Grid of write items. All rows must have equal length and
@@ -111,6 +112,23 @@ class SheetWriteSchema:
                     f"{[t.__name__ for t in col_types]}. "
                     "All rows must use the same type for each column position."
                 )
+
+        for row_idx, row in enumerate(rows):
+            seen_titles: set[str] = set()
+            for item in row:
+                if isinstance(item, (FormattedTable2D, FormattedTable1D, TableKeyValue)):
+                    if isinstance(item, (FormattedTable2D, FormattedTable1D)):
+                        title = item.table.title
+                    elif isinstance(item, TableKeyValue):
+                        title = item.title
+                    else:
+                        continue
+                    if title in seen_titles:
+                        raise ValueError(
+                            f"Duplicate table title {title!r} in row {row_idx}. "
+                            "Table titles must be unique within the same row."
+                        )
+                    seen_titles.add(title)
 
         self.rows = rows
         self.col_width = col_width
@@ -655,24 +673,26 @@ def _calc_footprint(item: SheetWriteItem, col_width: int, row_height: int) -> tu
 
 
 def _build_grid(schema: SheetWriteSchema):
-    """Pass 1: compute origins for every item and build table_origins map."""
+    """Pass 1: compute origins for every item and build per-row table_origins maps."""
     origins = []
-    table_origins = {}
+    row_table_origins: list[dict[str, tuple[int, int]]] = []
     current_row = schema.sheet_margin_rows
     for row_items in schema.rows:
         current_col = schema.sheet_margin_cols
         row_height_used = 0
         row_origins = []
+        this_row_origins: dict[str, tuple[int, int]] = {}
         for item in row_items:
             row_origins.append((current_row, current_col))
             if isinstance(item, FormattedTable2D):
-                table_origins[item.table.title] = (current_row, current_col)
+                this_row_origins[item.table.title] = (current_row, current_col)
             used_rows, used_cols = _calc_footprint(item, schema.col_width, schema.row_height)
             current_col += used_cols + TABLE_MARGIN_COLS
             row_height_used = max(row_height_used, used_rows)
         origins.append(row_origins)
+        row_table_origins.append(this_row_origins)
         current_row += row_height_used + TABLE_MARGIN_ROWS
-    return origins, table_origins
+    return origins, row_table_origins
 
 
 # ---------------------------------------------------------------------------
@@ -699,13 +719,7 @@ def _write_to_worksheet(workbook, ws, schema: SheetWriteSchema, sheet_name: str)
     """
     from .chart import render_chart
 
-    origins, table_origins = _build_grid(schema)
-    all_fmt_tables = [
-        item
-        for row_items in schema.rows
-        for item in row_items
-        if isinstance(item, FormattedTable2D)
-    ]
+    origins, row_table_origins = _build_grid(schema)
     cache = _FmtCache(workbook)
 
     for row_idx, row_items in enumerate(schema.rows):
@@ -718,15 +732,21 @@ def _write_to_worksheet(workbook, ws, schema: SheetWriteSchema, sheet_name: str)
             elif isinstance(item, TableKeyValue):
                 _write_table_key_value(ws, workbook, item, origin_row, origin_col, cache)
             elif isinstance(item, ChartConfig):
+                row_origins = row_table_origins[row_idx]
+                row_fmt_tables = [
+                    ft
+                    for col_idx2, ft in enumerate(row_items)
+                    if isinstance(ft, FormattedTable2D)
+                ]
                 render_chart(
                     ws=ws,
                     workbook=workbook,
                     config=item,
-                    tables=all_fmt_tables,
+                    tables=row_fmt_tables,
                     origin_row=origin_row,
                     origin_col=origin_col,
                     schema=schema,
-                    table_origins=table_origins,
+                    table_origins=row_origins,
                     sheet_name=sheet_name,
                 )
             else:
