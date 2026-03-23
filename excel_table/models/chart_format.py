@@ -108,9 +108,7 @@ class ChartConfig(BaseModel):
         the **same row** of :class:`~excel_table.writer.SheetWriteSchema`.
         Cross-row references raise a ``ValueError`` at render time because
         only same-row tables are passed to
-        :func:`~excel_table.chart.render_chart`. Within a single
-        :class:`ChartConfig`, duplicate ``source_block`` values across series
-        entries are rejected at model construction time.
+        :func:`~excel_table.chart.render_chart`. 
 
     Attributes:
         chart_type: Excel chart type: ``"line"``, ``"scatter"``, or ``"bar"``.
@@ -135,19 +133,6 @@ class ChartConfig(BaseModel):
     y_label: str = ""
     x_axis: Literal["column", "row", "value"]
     y_axis: Literal["column", "row", "value"]
-
-    @model_validator(mode="after")
-    def _check_unique_source_blocks(self) -> "ChartConfig":
-        """Validate that all ``source_block`` values within this chart are unique."""
-        seen: set[str] = set()
-        for s in self.series:
-            if s.source_block in seen:
-                raise ValueError(
-                    f"Duplicate source_block '{s.source_block}' in ChartConfig.series. "
-                    "Each series must reference a distinct Table2D title."
-                )
-            seen.add(s.source_block)
-        return self
 
     def occupied_cells(self, col_width: int, row_height: int) -> tuple[int, int]:
         """
