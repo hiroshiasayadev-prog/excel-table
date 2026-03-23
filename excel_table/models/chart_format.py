@@ -96,6 +96,7 @@ class LineSeriesConfig(BaseModel):
     series_color: str | None = None
     row_filter: str | None = None
     col_filter: str | None = None
+    y_axis: Literal["y1", "y2"] = "y1"
 
 
 class ChartConfig(BaseModel):
@@ -121,11 +122,13 @@ class ChartConfig(BaseModel):
             unique across entries.
         x_label: Axis label for the X axis.
         y_label: Axis label for the Y axis.
+        y2_label: Axis label for the secondary Y axis. Empty string (default)
+            means no secondary axis label. Set this when any series uses
+            ``y_axis="y2"``.
         x_axis: Which dimension of the source table maps to the X axis.
             ``"column"`` → column headers become X values;
             ``"row"`` → row headers become X values;
             ``"value"`` → treated as ``"row"`` for header lookup.
-        y_axis: Which dimension of the source table maps to the Y axis.
     """
 
     chart_type: Literal["line", "scatter", "bar"]
@@ -134,8 +137,8 @@ class ChartConfig(BaseModel):
     series: list[LineSeriesConfig]
     x_label: str = ""
     y_label: str = ""
+    y2_label: str = ""
     x_axis: Literal["column", "row", "value"]
-    y_axis: Literal["column", "row", "value"]
 
     def occupied_cells(self, col_width: int, row_height: int) -> tuple[int, int]:
         """

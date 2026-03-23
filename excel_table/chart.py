@@ -434,7 +434,6 @@ def _add_series_for_config(
     origin_row: int,
     origin_col: int,
     x_axis: Literal["column", "row", "value"],
-    y_axis: Literal["column", "row", "value"],
 ) -> None:
     """
     Add all xlsxwriter series entries for one :class:`LineSeriesConfig`.
@@ -461,7 +460,6 @@ def _add_series_for_config(
         origin_row: Table origin row (0-indexed).
         origin_col: Table origin column (0-indexed).
         x_axis: Chart X axis mapping.
-        y_axis: Chart Y axis mapping.
     """
     table = fmt.table
     scale = series_cfg.series_colorscale
@@ -538,7 +536,8 @@ def _add_series_for_config(
                     "fill": {"color": hex_color},
                     "border": {"color": hex_color},
                 }
-
+        if series_cfg.y_axis == "y2":
+            series_def["y2_axis"] = True
         chart.add_series(series_def)
 
 
@@ -556,6 +555,7 @@ def render_chart(
     schema: "SheetWriteSchema",
     table_origins: dict[str, tuple[int, int]],
     sheet_name: str,
+    on_axis_mismatch: Literal["raise", "warn", "ignore"] = "raise",
 ) -> tuple[int, int]:
     """
     Render an Excel chart into *ws* according to *config*.
@@ -585,6 +585,12 @@ def render_chart(
             (0-indexed) for every :class:`FormattedTable2D` already written to
             this sheet.
         sheet_name: Worksheet name, embedded in xlsxwriter range references.
+        on_axis_mismatch: How to handle series referencing tables with
+            inconsistent x-axis values. ``"raise"`` (default) raises a
+            :class:`ValueError` immediately; ``"warn"`` emits a
+            :class:`UserWarning` and continues; ``"ignore"`` skips the
+            check entirely. Values are rounded to 10 decimal places before
+            comparison to tolerate floating-point representation errors.
 
     Returns:
         ``(used_cols, used_rows)`` — cell footprint of the inserted chart,
@@ -593,6 +599,8 @@ def render_chart(
     Raises:
         ValueError: If any ``source_block`` title is missing or duplicated in
             *tables*, or if any filter expression is invalid.
+        ValueError: If series reference tables with inconsistent x-axis
+            values and ``on_axis_mismatch="raise"``.
 
     Example::
 
@@ -608,11 +616,44 @@ def render_chart(
     # Validate all filters before touching xlsxwriter
     _validate_all_filters(config, tables, sheet_name)
 
+    # Validate x-axis value consistency across series
+    def _rounded(values: list, digits: int = 10) -> tuple:
+        result = []
+        for v in values:
+            try:
+                result.append(round(float(v), digits))
+            except (ValueError, TypeError):
+                result.append(v)
+        return tuple(result)
+
+    x_axes: dict[str, tuple] = {}
+    for series_cfg in config.series:
+        fmt = _resolve_table(series_cfg.source_block, tables, sheet_name)
+        axis_values = fmt.table.row if config.x_axis == "row" else fmt.table.column
+        x_axes[series_cfg.source_block] = _rounded(axis_values)
+
+    unique_axes = set(x_axes.values())
+    if len(unique_axes) > 1 and on_axis_mismatch != "ignore":
+        msg = (
+            f"ChartConfig series reference tables with inconsistent x-axis values: "
+            f"{x_axes}. This would produce a silently incorrect chart."
+        )
+        if on_axis_mismatch == "raise":
+            raise ValueError(msg)
+        else:
+            import warnings
+            warnings.warn(msg, UserWarning, stacklevel=2)
+
     # Create chart object
     chart = workbook.add_chart({"type": config.chart_type})
+    if chart is None:
+        raise NotImplementedError()
+    
     chart.set_x_axis({"name": config.x_label})
     chart.set_y_axis({"name": config.y_label})
     chart.set_size({"width": config.width, "height": config.height})
+    if config.y2_label:
+        chart.set_y2_axis({"name": config.y2_label})
 
     # Add series for each LineSeriesConfig
     for series_cfg in config.series:
@@ -627,7 +668,6 @@ def render_chart(
             origin_row=t_origin_row,
             origin_col=t_origin_col,
             x_axis=config.x_axis,
-            y_axis=config.y_axis,
         )
 
     # Insert chart at origin cell
