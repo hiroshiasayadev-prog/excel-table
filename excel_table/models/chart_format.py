@@ -76,13 +76,16 @@ class LineSeriesConfig(BaseModel):
             priority. See the color priority note above.
         row_filter: Optional filter expression evaluated per row value
             (e.g. ``"y >= 0"``). Rows where the expression is ``False``
-            are excluded. The axis value is passed as a scalar ``float``.
+            are excluded. The axis value is cast to ``float`` if possible,
+            otherwise bound as a string — allowing filters against both
+            numeric axes (e.g. ``"vgs >= 0.0"``) and string axes
+            (e.g. ``"sweep == 'forward'"``).
             Variable names must correspond to the row axis of the source table
             (default ``"row"`` or a property alias). Using a column-axis name
             raises :class:`ValueError` at render time.
-        col_filter: Optional filter expression evaluated per column value
-            (e.g. ``"x <= 6000"``). Same rules as ``row_filter``, but
-            variable names must correspond to the column axis.
+        col_filter: Optional filter expression evaluated per column value.
+            Same rules as ``row_filter``, but variable names must correspond
+            to the column axis.
     """
 
     label: str

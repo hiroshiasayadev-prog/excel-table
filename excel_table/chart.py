@@ -161,22 +161,33 @@ def _validate_filter_expr(
 def _passes_filter(
     expr: str,
     valid_names: frozenset[str],
-    value: float,
+    value: str,
 ) -> bool:
     """
     Evaluate *expr* with the axis value bound to all names in *valid_names*.
 
     Pre-condition: *expr* has already been validated by :func:`_validate_filter_expr`.
 
+    Attempts to cast *value* to ``float`` before binding. If the cast fails
+    (e.g. string axis labels such as ``"forward"``), the raw string is bound
+    instead. This allows filter expressions to work with both numeric axes
+    (e.g. ``"vgs >= 0.0"``) and string axes (e.g. ``"column == 'forward'"``).
+
     Args:
         expr: Validated Python expression string.
         valid_names: Names exposed in the evaluation namespace; all bound to *value*.
-        value: Scalar float for the current axis header value.
+        value: Axis header value as a string. Cast to ``float`` if possible,
+            otherwise used as-is.
 
     Returns:
         ``True`` if the expression is truthy, ``False`` on falsy or any runtime error.
     """
-    ns = {name: value for name in valid_names}
+    _value: float | str | None = None
+    try:
+        _value = float(value)
+    except:
+        _value = value
+    ns = {name: _value for name in valid_names}
     try:
         return bool(eval(expr, {"__builtins__": {}}, ns))  # noqa: S307
     except Exception:
@@ -462,12 +473,12 @@ def _add_series_for_config(
     filtered_row_indices = [
         i for i, rv in enumerate(table.row)
         if series_cfg.row_filter is None
-        or _passes_filter(series_cfg.row_filter, row_names, float(rv))
+        or _passes_filter(series_cfg.row_filter, row_names, rv)
     ]
     filtered_col_indices = [
         i for i, cv in enumerate(table.column)
         if series_cfg.col_filter is None
-        or _passes_filter(series_cfg.col_filter, col_names, float(cv))
+        or _passes_filter(series_cfg.col_filter, col_names, cv)
     ]
 
     # Determine split axis
