@@ -77,7 +77,9 @@ class Table1D(BaseModel, Generic[T]):
     Attributes:
         title: Table title. Used as the anchor for sheet scanning.
         column_label: Label for the column axis.
-        column: List of column header strings.
+        column: List of column header values. Accepts ``str``, ``float``, or ``int``.
+                Numeric values are written as numeric cells in Excel; string values
+                are written as text cells.
         values: Nested list of shape ``[1][len(column)]`` for horizontal
             orientation, or ``[len(column)][1]`` for vertical orientation.
             Inner ``None`` represents an empty cell.
@@ -92,7 +94,7 @@ class Table1D(BaseModel, Generic[T]):
 
     title: str
     column_label: str
-    column: list[str]
+    column: list[str | float | int]
     values: list[list[T | None]]
 
     @model_validator(mode="after")
@@ -133,8 +135,10 @@ class Table2D(BaseModel, Generic[T]):
 
         column_label: Label for the column axis.
         row_label: Label for the row axis.
-        column: List of column header strings.
-        row: List of row header strings.
+        column: List of column header values. Accepts ``str``, ``float``, or ``int``.
+                Numeric values are written as numeric cells in Excel; string values
+                are written as text cells.
+        row: List of row header values. Same type rules as ``column``.
         values: Nested list of shape ``[len(row)][len(column)]``.
             Inner ``None`` represents an empty cell.
     """
@@ -142,8 +146,8 @@ class Table2D(BaseModel, Generic[T]):
     title: str
     column_label: str
     row_label: str
-    column: list[str]
-    row: list[str]
+    column: list[str | float | int]
+    row: list[str | float | int]
     values: list[list[T | None]]
 
     @model_validator(mode="after")

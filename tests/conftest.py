@@ -1,185 +1,249 @@
 """
 Shared pytest fixtures for excel_table tests.
 
-Reader fixtures are built directly with openpyxl (not via the writer)
-so that reader and writer tests remain fully independent.
+Round-trip philosophy
+---------------------
+These fixtures are designed around the write → read round-trip that is
+excel-table's core value proposition. Rather than building xlsx files
+directly with openpyxl (which would test the reader in isolation),
+fixtures use the writer to produce xlsx bytes, then feed them to the
+reader. This ensures that write and read stay mutually consistent.
+
+Transistor domain
+-----------------
+The transistor measurement domain (GaAs HEMT, IV + Transfer characteristics)
+is used as a realistic stand-in for the "instrument CSV → Excel → excel-table"
+use case that the demo app demonstrates. Device parameters and sweep
+conditions are defined as module-level constants so that tests can assert
+on exact values.
 """
 from __future__ import annotations
-from pathlib import Path
 
-import openpyxl
+import numpy as np
 import pytest
+import xarray as xr
+
+from transistor import Analyzer, TransistorModel
+from transistor.converter import iv_to_xarray, transfer_to_xarray
+
+from excel_table.models import (
+    Table2D,
+    FormattedTable2D,
+    TableKeyValue,
+)
+from excel_table.writer import SheetWriteSchema, write_sheet_bytes
+
+# ---------------------------------------------------------------------------
+# Device constants
+# ---------------------------------------------------------------------------
+
+DEVICE_A_W_UM = 100.0
+DEVICE_A_L_UM = 1.0
+
+DEVICE_B_W_UM = 200.0
+DEVICE_B_L_UM = 0.5
+
+SHEET_NAME = "Transistor Input"
+
+# Sweep conditions — kept small for test speed
+VDS_FROM   = 0.0
+VDS_UNTIL  = 0.5
+VDS_STEP   = 0.1
+VGS_FROM_IV  = -0.4
+VGS_UNTIL_IV = 0.4
+VGS_STEP_IV  = 0.2
+
+VGS_FROM_TR  = -0.5
+VGS_UNTIL_TR = 0.5
+VGS_STEP_TR  = 0.1
+VDS_TR       = 1.0
+DT           = 1e-4
 
 
 # ---------------------------------------------------------------------------
-# Common table parameters
+# Model helpers
 # ---------------------------------------------------------------------------
 
-TABLE2D_TITLE        = "Current Map"
-TABLE2D_COLUMN_LABEL = "Voltage"
-TABLE2D_ROW_LABEL    = "Time"
-TABLE2D_COLUMNS      = ["1.0", "2.0", "3.0"]
-TABLE2D_ROWS         = ["10.0", "20.0"]
-TABLE2D_VALUES       = [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]]
-
-TABLE1D_TITLE        = "Voltage Points"
-TABLE1D_COLUMN_LABEL = "Voltage"
-TABLE1D_COLUMNS      = ["1.0", "2.0", "3.0"]
-TABLE1D_VALUES       = [[0.1, 0.2, 0.3]]
-
-KV_TITLE   = "Conditions"
-KV_COLUMNS = ["temperature", "frequency"]
-KV_VALUES  = ["25.0", "50.0"]
+def _make_model(W_um: float, L_um: float) -> TransistorModel:
+    m = TransistorModel()
+    m.W = W_um * 1e-6
+    m.L = L_um * 1e-6
+    return m
 
 
-# ---------------------------------------------------------------------------
-# Table2D fixture
-#
-# Layout (1-indexed):
-#   A1 = title
-#   A2:B3 = merged blank (2×2)
-#   C2 = column_label
-#   C3, D3, E3 = column values
-#   A4 = row_label (merged A4:A5)
-#   B4, B5 = row values
-#   C4:E4, C5:E5 = data values
-# ---------------------------------------------------------------------------
-
-@pytest.fixture
-def table2d_xlsx(tmp_path: Path) -> Path:
-    """Minimal xlsx containing one Table2D written with openpyxl directly."""
-    wb = openpyxl.Workbook()
-    ws = wb.active
-
-    # title
-    ws["A1"] = TABLE2D_TITLE
-
-    # column_label
-    ws["C2"] = TABLE2D_COLUMN_LABEL
-
-    # column values
-    for ci, val in enumerate(TABLE2D_COLUMNS):
-        ws.cell(row=3, column=3 + ci, value=val)
-
-    # row_label
-    ws["A4"] = TABLE2D_ROW_LABEL
-
-    # row values and data
-    for ri, row_val in enumerate(TABLE2D_ROWS):
-        ws.cell(row=4 + ri, column=2, value=row_val)
-        for ci, cell_val in enumerate(TABLE2D_VALUES[ri]):
-            ws.cell(row=4 + ri, column=3 + ci, value=cell_val)
-
-    path = tmp_path / "table2d.xlsx"
-    wb.save(path)
-    return path
+def _sweep_iv(model: TransistorModel) -> xr.DataArray:
+    return Analyzer.sweep_IV(
+        transistor=model,
+        vds_from=VDS_FROM, vds_until=VDS_UNTIL, vds_step=VDS_STEP,
+        vgs_from=VGS_FROM_IV, vgs_until=VGS_UNTIL_IV, vgs_step=VGS_STEP_IV,
+    )
 
 
-@pytest.fixture
-def table2d_duplicate_xlsx(tmp_path: Path) -> Path:
-    """xlsx containing two Table2D blocks with the same title."""
-    wb = openpyxl.Workbook()
-    ws = wb.active
-
-    def _write(start_row: int):
-        ws.cell(row=start_row,     column=1, value=TABLE2D_TITLE)
-        ws.cell(row=start_row + 1, column=3, value=TABLE2D_COLUMN_LABEL)
-        for ci, val in enumerate(TABLE2D_COLUMNS):
-            ws.cell(row=start_row + 2, column=3 + ci, value=val)
-        ws.cell(row=start_row + 3, column=1, value=TABLE2D_ROW_LABEL)
-        for ri, row_val in enumerate(TABLE2D_ROWS):
-            ws.cell(row=start_row + 3 + ri, column=2, value=row_val)
-            for ci, cell_val in enumerate(TABLE2D_VALUES[ri]):
-                ws.cell(row=start_row + 3 + ri, column=3 + ci, value=cell_val)
-
-    _write(start_row=1)
-    _write(start_row=10)
-
-    path = tmp_path / "table2d_duplicate.xlsx"
-    wb.save(path)
-    return path
+def _sweep_transfer(model: TransistorModel) -> xr.DataArray:
+    return Analyzer.sweep_Vgs(
+        transistor=model,
+        vgs_from=VGS_FROM_TR, vgs_until=VGS_UNTIL_TR, vgs_step=VGS_STEP_TR,
+        vds=VDS_TR, dt=DT,
+    )
 
 
 # ---------------------------------------------------------------------------
-# Table1D fixture
-#
-# Layout (1-indexed):
-#   A1 = title
-#   A2 = column_label (merged A2:C2)
-#   A3, B3, C3 = column values
-#   A4, B4, C4 = data values
+# Single-device fixtures
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
-def table1d_xlsx(tmp_path: Path) -> Path:
-    """Minimal xlsx containing one Table1D written with openpyxl directly."""
-    wb = openpyxl.Workbook()
-    ws = wb.active
+def model_a() -> TransistorModel:
+    """Device A: W=100um, L=1um."""
+    return _make_model(DEVICE_A_W_UM, DEVICE_A_L_UM)
 
-    ws["A1"] = TABLE1D_TITLE
-    ws["A2"] = TABLE1D_COLUMN_LABEL
-    for ci, val in enumerate(TABLE1D_COLUMNS):
-        ws.cell(row=3, column=1 + ci, value=val)
-    for ci, val in enumerate(TABLE1D_VALUES[0]):
-        ws.cell(row=4, column=1 + ci, value=val)
 
-    path = tmp_path / "table1d.xlsx"
-    wb.save(path)
-    return path
+@pytest.fixture
+def iv_a(model_a) -> xr.DataArray:
+    """IV sweep DataArray for device A."""
+    return _sweep_iv(model_a)
+
+
+@pytest.fixture
+def transfer_a(model_a) -> xr.DataArray:
+    """Transfer sweep DataArray for device A."""
+    return _sweep_transfer(model_a)
 
 
 # ---------------------------------------------------------------------------
-# TableKeyValue fixture
-#
-# Layout (1-indexed):
-#   A1 = title
-#   A2, B2 = column (key) values
-#   A3, B3 = value strings
+# Two-device fixtures (num_devices=2 round-trip)
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
-def table_kv_xlsx(tmp_path: Path) -> Path:
-    """Minimal xlsx containing one TableKeyValue written with openpyxl directly."""
-    wb = openpyxl.Workbook()
-    ws = wb.active
+def model_b() -> TransistorModel:
+    """Device B: W=200um, L=0.5um."""
+    return _make_model(DEVICE_B_W_UM, DEVICE_B_L_UM)
 
-    ws["A1"] = KV_TITLE
-    for ci, val in enumerate(KV_COLUMNS):
-        ws.cell(row=2, column=1 + ci, value=val)
-    for ci, val in enumerate(KV_VALUES):
-        ws.cell(row=3, column=1 + ci, value=val)
-
-    path = tmp_path / "table_kv.xlsx"
-    wb.save(path)
-    return path
-
-
-# ---------------------------------------------------------------------------
-# None-value fixture (Table2D with sparse values)
-# ---------------------------------------------------------------------------
 
 @pytest.fixture
-def table2d_none_xlsx(tmp_path: Path) -> Path:
-    """Table2D fixture where some data cells are None (empty)."""
-    wb = openpyxl.Workbook()
-    ws = wb.active
+def iv_b(model_b) -> xr.DataArray:
+    return _sweep_iv(model_b)
 
-    ws["A1"] = TABLE2D_TITLE
-    ws["C2"] = TABLE2D_COLUMN_LABEL
-    for ci, val in enumerate(TABLE2D_COLUMNS):
-        ws.cell(row=3, column=3 + ci, value=val)
-    ws["A4"] = TABLE2D_ROW_LABEL
-    for ri, row_val in enumerate(TABLE2D_ROWS):
-        ws.cell(row=4 + ri, column=2, value=row_val)
 
-    # sparse: leave some cells empty
-    ws["C4"] = 0.1
-    # D4 intentionally empty → None
-    ws["E4"] = 0.3
-    ws["C5"] = None
-    ws["D5"] = 0.5
-    ws["E5"] = None
+@pytest.fixture
+def transfer_b(model_b) -> xr.DataArray:
+    return _sweep_transfer(model_b)
 
-    path = tmp_path / "table2d_none.xlsx"
-    wb.save(path)
-    return path
+
+# ---------------------------------------------------------------------------
+# Excel template bytes fixtures
+# ---------------------------------------------------------------------------
+
+def _build_template_row(
+    W_um: float,
+    L_um: float,
+    iv: xr.DataArray,
+    transfer: xr.DataArray,
+) -> list:
+    """Build one row of [TableKeyValue, FormattedTable2D, FormattedTable2D]."""
+    vds = [v for v in iv.coords["vds"].values]
+    vgs = [v for v in iv.coords["vgs"].values]
+    tr_vgs = [v for v in transfer.coords["vgs"].values]
+
+    model_params = TableKeyValue(
+        title="Model Params",
+        column=["GateWidth [um]", "GateLength [um]"],
+        value=[W_um, L_um],
+    )
+    iv_table = FormattedTable2D(
+        table=Table2D(
+            title="IV Result",
+            column_label="Vgs [V]",
+            row_label="Vds [V]",
+            column=vgs,
+            row=vds,
+            values=np.full((len(vds), len(vgs)), None).tolist(),
+        )
+    )
+    transfer_table = FormattedTable2D(
+        table=Table2D(
+            title="Transfer Result",
+            column_label="Sweep Direction",
+            row_label="Vgs [V]",
+            column=["forward", "backward"],
+            row=tr_vgs,
+            values=np.full((len(tr_vgs), 2), None).tolist(),
+        )
+    )
+    return [model_params, iv_table, transfer_table]
+
+
+@pytest.fixture
+def template_bytes_1device(iv_a, transfer_a) -> bytes:
+    """Blank input template for 1 device (device A axes, values=None)."""
+    row = _build_template_row(DEVICE_A_W_UM, DEVICE_A_L_UM, iv_a, transfer_a)
+    schema = SheetWriteSchema(rows=[row])
+    return write_sheet_bytes(sheet_name=SHEET_NAME, schema=schema)
+
+
+@pytest.fixture
+def template_bytes_2devices(iv_a, transfer_a, iv_b, transfer_b) -> bytes:
+    """Blank input template for 2 devices."""
+    row_a = _build_template_row(DEVICE_A_W_UM, DEVICE_A_L_UM, iv_a, transfer_a)
+    row_b = _build_template_row(DEVICE_B_W_UM, DEVICE_B_L_UM, iv_b, transfer_b)
+    schema = SheetWriteSchema(rows=[row_a, row_b])
+    return write_sheet_bytes(sheet_name=SHEET_NAME, schema=schema)
+
+
+# ---------------------------------------------------------------------------
+# Filled template bytes fixtures (values populated for round-trip tests)
+# ---------------------------------------------------------------------------
+
+def _fill_template(
+    W_um: float,
+    L_um: float,
+    iv: xr.DataArray,
+    transfer: xr.DataArray,
+) -> list:
+    """Build one row with actual measurement values filled in."""
+    vds = [v for v in iv.coords["vds"].values]
+    vgs = [v for v in iv.coords["vgs"].values]
+    tr_vgs = [v for v in transfer.coords["vgs"].values]
+
+    model_params = TableKeyValue(
+        title="Model Params",
+        column=["GateWidth [um]", "GateLength [um]"],
+        value=[W_um, L_um],
+    )
+    iv_table = FormattedTable2D(
+        table=Table2D(
+            title="IV Result",
+            column_label="Vgs [V]",
+            row_label="Vds [V]",
+            column=vgs,
+            row=vds,
+            values=iv.values.T.tolist(),
+        )
+    )
+    transfer_table = FormattedTable2D(
+        table=Table2D(
+            title="Transfer Result",
+            column_label="Sweep Direction",
+            row_label="Vgs [V]",
+            column=["forward", "backward"],
+            row=tr_vgs,
+            values=transfer.values.T.tolist(),
+        )
+    )
+    return [model_params, iv_table, transfer_table]
+
+
+@pytest.fixture
+def filled_bytes_1device(iv_a, transfer_a) -> bytes:
+    """Filled input template for 1 device (device A)."""
+    row = _fill_template(DEVICE_A_W_UM, DEVICE_A_L_UM, iv_a, transfer_a)
+    schema = SheetWriteSchema(rows=[row])
+    return write_sheet_bytes(sheet_name=SHEET_NAME, schema=schema)
+
+
+@pytest.fixture
+def filled_bytes_2devices(iv_a, transfer_a, iv_b, transfer_b) -> bytes:
+    """Filled input template for 2 devices."""
+    row_a = _fill_template(DEVICE_A_W_UM, DEVICE_A_L_UM, iv_a, transfer_a)
+    row_b = _fill_template(DEVICE_B_W_UM, DEVICE_B_L_UM, iv_b, transfer_b)
+    schema = SheetWriteSchema(rows=[row_a, row_b])
+    return write_sheet_bytes(sheet_name=SHEET_NAME, schema=schema)

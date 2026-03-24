@@ -161,7 +161,7 @@ def _validate_filter_expr(
 def _passes_filter(
     expr: str,
     valid_names: frozenset[str],
-    value: str,
+    value: str | float | int,
 ) -> bool:
     """
     Evaluate *expr* with the axis value bound to all names in *valid_names*.

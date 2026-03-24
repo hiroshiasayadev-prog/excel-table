@@ -223,7 +223,7 @@ def _read_table2d(
 
     # col values
     col_values_r = col_label_r + 1 if col_loc == "top" else col_label_r - 1
-    column = [str(v) for v in _read_values_right(ws, col_values_r, col_label_c)]
+    column = [v for v in _read_values_right(ws, col_values_r, col_label_c)]
 
     # row_label
     if col_loc == "top":
@@ -238,7 +238,7 @@ def _read_table2d(
 
     # row values
     row_values_c = row_label_c + 1 if row_loc == "left" else row_label_c - 1
-    row = [str(v) for v in _read_values_down(ws, row_label_r, row_values_c)]
+    row = [v for v in _read_values_down(ws, row_label_r, row_values_c)]
 
     # data matrix
     if col_loc == "top" and row_loc == "left":
@@ -274,7 +274,7 @@ def _read_table1d(
     column_label = str(ws.cell(row=ar + 1, column=ac).value)
 
     if schema.orientation == "horizontal":
-        column = [str(v) for v in _read_values_right(ws, ar + 2, ac)]
+        column = [v for v in _read_values_right(ws, ar + 2, ac)]
         values = [[ws.cell(row=ar + 3, column=ac + ci).value for ci in range(len(column))]]
     else:
         n_c, _ = _get_merge_span(ws, ar + 1, ac)
@@ -295,7 +295,7 @@ def _read_table_key_value(
     ac: int,
     schema: TableKeyValueSchema,
 ) -> TableKeyValue:
-    column = [str(v) for v in _read_values_right(ws, ar + 1, ac)]
+    column = [v for v in _read_values_right(ws, ar + 1, ac)]
     value = [ws.cell(row=ar + 2, column=ac + ci).value for ci in range(len(column))]
 
     return schema.table_type.model_validate(dict(
