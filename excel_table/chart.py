@@ -433,7 +433,6 @@ def _add_series_for_config(
     fmt: FormattedTable2D,
     origin_row: int,
     origin_col: int,
-    x_axis: Literal["column", "row", "value"],
 ) -> None:
     """
     Add all xlsxwriter series entries for one :class:`LineSeriesConfig`.
@@ -480,7 +479,7 @@ def _add_series_for_config(
     ]
 
     # Determine split axis
-    split_by_row = (x_axis == "column")
+    split_by_row = (series_cfg.x_axis == "column")
 
     if split_by_row:
         split_indices = filtered_row_indices
@@ -555,7 +554,6 @@ def render_chart(
     schema: "SheetWriteSchema",
     table_origins: dict[str, tuple[int, int]],
     sheet_name: str,
-    on_axis_mismatch: Literal["raise", "warn", "ignore"] = "raise",
 ) -> tuple[int, int]:
     """
     Render an Excel chart into *ws* according to *config*.
@@ -585,12 +583,6 @@ def render_chart(
             (0-indexed) for every :class:`FormattedTable2D` already written to
             this sheet.
         sheet_name: Worksheet name, embedded in xlsxwriter range references.
-        on_axis_mismatch: How to handle series referencing tables with
-            inconsistent x-axis values. ``"raise"`` (default) raises a
-            :class:`ValueError` immediately; ``"warn"`` emits a
-            :class:`UserWarning` and continues; ``"ignore"`` skips the
-            check entirely. Values are rounded to 10 decimal places before
-            comparison to tolerate floating-point representation errors.
 
     Returns:
         ``(used_cols, used_rows)`` — cell footprint of the inserted chart,
@@ -626,24 +618,6 @@ def render_chart(
                 result.append(v)
         return tuple(result)
 
-    x_axes: dict[str, tuple] = {}
-    for series_cfg in config.series:
-        fmt = _resolve_table(series_cfg.source_block, tables, sheet_name)
-        axis_values = fmt.table.row if config.x_axis == "row" else fmt.table.column
-        x_axes[series_cfg.source_block] = _rounded(axis_values)
-
-    unique_axes = set(x_axes.values())
-    if len(unique_axes) > 1 and on_axis_mismatch != "ignore":
-        msg = (
-            f"ChartConfig series reference tables with inconsistent x-axis values: "
-            f"{x_axes}. This would produce a silently incorrect chart."
-        )
-        if on_axis_mismatch == "raise":
-            raise ValueError(msg)
-        else:
-            import warnings
-            warnings.warn(msg, UserWarning, stacklevel=2)
-
     # Create chart object
     chart = workbook.add_chart({"type": config.chart_type})
     if chart is None:
@@ -667,7 +641,6 @@ def render_chart(
             fmt=fmt,
             origin_row=t_origin_row,
             origin_col=t_origin_col,
-            x_axis=config.x_axis,
         )
 
     # Insert chart at origin cell

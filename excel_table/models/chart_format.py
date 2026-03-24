@@ -86,6 +86,12 @@ class LineSeriesConfig(BaseModel):
         col_filter: Optional filter expression evaluated per column value.
             Same rules as ``row_filter``, but variable names must correspond
             to the column axis.
+        x_axis: Which dimension of the source table maps to the X axis.
+            ``"row"`` (default) → row headers become X values, split by column;
+            ``"column"`` → column headers become X values, split by row.
+        y_axis: Which Y axis this series plots against. ``"y1"`` (default)
+            uses the primary Y axis; ``"y2"`` uses the secondary axis.
+            Requires ``ChartConfig.y2_label`` to be set.
     """
 
     label: str
@@ -96,6 +102,7 @@ class LineSeriesConfig(BaseModel):
     series_color: str | None = None
     row_filter: str | None = None
     col_filter: str | None = None
+    x_axis: Literal["column", "row"] = "row"
     y_axis: Literal["y1", "y2"] = "y1"
 
 
@@ -138,7 +145,6 @@ class ChartConfig(BaseModel):
     x_label: str = ""
     y_label: str = ""
     y2_label: str = ""
-    x_axis: Literal["column", "row", "value"]
 
     def occupied_cells(self, col_width: int, row_height: int) -> tuple[int, int]:
         """
