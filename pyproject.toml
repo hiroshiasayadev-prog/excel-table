@@ -1,10 +1,13 @@
+[tool.setuptools.packages.find]
+include = ["excel_table*"]
+
 [project]
 name = "excel-table"
 version = "0.1.8"
 description = "Structured Excel table read/write library"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
+license = "MIT"
 dependencies = [
     "pydantic>=2.0",
     "openpyxl>=3.1",
