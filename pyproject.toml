@@ -1,17 +1,16 @@
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
 [project]
 name = "excel-table"
-version = "0.1.7"
+version = "0.1.8"
 description = "Structured Excel table read/write library"
+readme = "README.md"
 requires-python = ">=3.11"
+license = { text = "MIT" }
 dependencies = [
     "pydantic>=2.0",
     "openpyxl>=3.1",
     "xlsxwriter>=3.1",
 ]
 
-[project.optional-dependencies]
-dev = ["pytest", "pytest-cov"]
+[project.urls]
+Homepage = "https://github.com/hiroshiasayadev-prog/excel-table"
+Repository = "https://github.com/hiroshiasayadev-prog/excel-table"
