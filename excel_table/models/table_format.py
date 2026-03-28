@@ -43,7 +43,7 @@ from __future__ import annotations
 
 from typing import Literal, Type
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .table_base import Table1D, Table2D, TableKeyValue
 
@@ -92,7 +92,7 @@ class FormattedTable1D(BaseModel):
     table: Table1D
     orientation: Literal["horizontal", "vertical"] = "horizontal"
     column_color: str
-    value_conditional_formats: list[dict] = []
+    value_conditional_formats: list[dict] = Field(default_factory=list)
     column_label_direction: Literal["horizontal", "vertical"] = "horizontal"
 
 
@@ -161,7 +161,7 @@ class FormattedTable2D(BaseModel):
     row_location: Literal["left", "right"] = "left"
     column_color: str = "white"
     row_color: str = "white"
-    value_conditional_formats: list[dict] = []
+    value_conditional_formats: list[dict] = Field(default_factory=list)
     column_label_direction: Literal["horizontal", "vertical"] = "horizontal"
     row_label_direction: Literal["horizontal", "vertical"] = "horizontal"
 
