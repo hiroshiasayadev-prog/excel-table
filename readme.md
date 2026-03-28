@@ -77,6 +77,7 @@ flowchart TB
     subgraph Read["Read side"]
         RS["FormattedTable2DSchema\nFormattedTable1DSchema\nTableKeyValueSchema\n─────────────────\ntitle + expected layout"]
         SRS["SheetReadSchema\ncolumns = [schema, schema, ...]\n= one logical row definition"]
+        PTM["Parsed table models\nTable2D / Table1D / TableKeyValue"]
     end
 
     T2D --> FT
@@ -87,7 +88,7 @@ flowchart TB
 
     SWS -->|write_sheet_bytes| XL["Excel (.xlsx)"]
     XL -->|"scan titles"| SRS
-    SRS --> T2D
+    SRS --> PTM
 ```
 
 ### How read and write work
@@ -108,7 +109,7 @@ flowchart LR
 
     subgraph R["Read flow"]
         R1["SheetReadSchema(columns=[...])"]
-        R2["reader.py\nfind anchor title → scan row\nread axes + values\nvalidate into table_type"]
+        R2["reader.py\nfind anchor title → scan same row\nread axes + values\nvalidate into table_type"]
         R3["TableKeyValue / Table2D / Table1D"]
         R4["to_dict() / to_dataarray()"]
         R1 --> R2 --> R3 --> R4
@@ -123,6 +124,8 @@ If parsing fails:
 - Check that title strings match exactly (including spaces and case)
 - Check that axis lengths in the file match the written template
 - Check that tables appear in the expected left-to-right order within a row
+
+For a step-by-step explanation of the title-anchor algorithm and common failure modes, see [docs/parsing.md](docs/parsing.md).
 
 ---
 
@@ -198,7 +201,7 @@ iv          = result[0][1]  # Table2DFloat
 
 `Table2DFloat` instructs the reader to cast all cell values to `float` during model validation. String axis labels (`"forward"`, `"backward"`) are supported alongside numeric axes.
 
-The reader scans the sheet for repeated occurrences of the first column title (`"Model Params"`), so **multiple devices in one file** just work — `result` contains one inner list per device row.
+The reader scans the sheet for repeated occurrences of the first schema item title (`"Model Params"`), so **multiple devices in one file** just work — `result` contains one inner list per device row.
 
 ### Working with parsed results
 
@@ -313,7 +316,13 @@ xlsx_bytes = write_sheet_bytes(sheet_name="Report", schema=schema)
 
 ## Demo
 
-The full workflow — instrument CSV → Excel template → user data entry → parse → formatted report — is demonstrated in the [excel-table demo app](https://your-demo-url).
+You can try the full workflow in the demo app:
+
+https://excel-table-demo.streamlit.app/
+
+The source code for the demo is available here:
+
+https://github.com/hiroshiasayadev-prog/excel-table-demo
 
 The demo uses a GaAs HEMT transistor simulator as a stand-in for real instrument output, covering:
 
