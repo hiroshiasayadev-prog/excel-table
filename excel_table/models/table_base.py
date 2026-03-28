@@ -188,6 +188,34 @@ class Table2D(BaseModel, Generic[T]):
                 )
         return self
 
+    def to_dataarray(self, dtype=None) -> "xr.DataArray":
+        """Convert to an :class:`xarray.DataArray`.
+
+        Args:
+            dtype: NumPy dtype passed to ``np.array``. If ``dtype=np.float64``,
+                ``None`` values are automatically converted to ``np.nan``.
+                If omitted, NumPy infers the dtype (typically ``object`` when
+                ``None`` is present).
+
+        Returns:
+            DataArray with dims ``("row", "column")``, coords keyed by
+            ``"row"`` and ``"column"``, and attrs containing ``title``,
+            ``row_label``, and ``column_label``.
+        """
+        import numpy as np
+        import xarray as xr
+
+        return xr.DataArray(
+            data=np.array(self.values, dtype=dtype),
+            dims=("row", "column"),
+            coords={"row": self.row, "column": self.column},
+            attrs={
+                "title": self.title,
+                "row_label": self.row_label,
+                "column_label": self.column_label,
+            },
+        )
+
 
 class TableKeyValue(BaseModel):
     """
@@ -235,3 +263,11 @@ class TableKeyValue(BaseModel):
                 f"column length {len(self.column)} != value length {len(self.value)}"
             )
         return self
+
+    def to_dict(self) -> dict[str, KeyValueScalar]:
+        """Return the key-value pairs as a plain dict.
+
+        Returns:
+            dict mapping each column key to its corresponding value.
+        """
+        return dict(zip(self.column, self.value))

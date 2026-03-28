@@ -264,3 +264,117 @@ class TestColorScale:
         """ColorScale with mid_color produces a 3-color scale."""
         cs = ColorScale(min_color="#FFFFFF", mid_color="#FFF176", max_color="#FF5722")
         assert cs.mid_color == "#FFF176"
+
+# ---------------------------------------------------------------------------
+# Table2D.to_dataarray
+# ---------------------------------------------------------------------------
+
+class TestTable2DToDataarray:
+    """to_dataarray conversion for Table2D."""
+
+    def setup_method(self):
+        self.table = Table2DFloat(
+            title="IV Result",
+            column_label="Vgs [V]",
+            row_label="Vds [V]",
+            column=[-0.4, 0.0, 0.4],
+            row=[0.0, 0.5],
+            values=[[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]],
+        )
+
+    def test_dims(self):
+        """dims must be ("row", "column")."""
+        import xarray as xr
+        da = self.table.to_dataarray()
+        assert da.dims == ("row", "column")
+
+    def test_coords(self):
+        """coords must match row and column axes."""
+        import numpy as np
+        da = self.table.to_dataarray()
+        np.testing.assert_array_equal(da.coords["row"].values, [0.0, 0.5])
+        np.testing.assert_array_equal(da.coords["column"].values, [-0.4, 0.0, 0.4])
+
+    def test_attrs(self):
+        """attrs must contain title, row_label, column_label."""
+        da = self.table.to_dataarray()
+        assert da.attrs["title"] == "IV Result"
+        assert da.attrs["row_label"] == "Vds [V]"
+        assert da.attrs["column_label"] == "Vgs [V]"
+
+    def test_values(self):
+        """values must match the original table values."""
+        import numpy as np
+        da = self.table.to_dataarray()
+        np.testing.assert_array_equal(da.values, [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]])
+
+    def test_dtype_float64_converts_none_to_nan(self):
+        """dtype=np.float64 converts None to nan."""
+        import numpy as np
+        table = Table2DFloat(
+            title="IV Result",
+            column_label="Vgs [V]",
+            row_label="Vds [V]",
+            column=[-0.4, 0.0, 0.4],
+            row=[0.0, 0.5],
+            values=[[None, 0.2, 0.3], [0.4, None, 0.6]],
+        )
+        da = table.to_dataarray(dtype=np.float64)
+        assert np.isnan(da.values[0][0])
+        assert np.isnan(da.values[1][1])
+        assert da.dtype == np.float64
+
+    def test_transpose(self):
+        """da.T reverses dims to ("column", "row")."""
+        da = self.table.to_dataarray()
+        assert da.T.dims == ("column", "row")
+
+    def test_string_axis(self):
+        """String axis values (e.g. 'forward'/'backward') are supported."""
+        import numpy as np
+        table = Table2DFloat(
+            title="Transfer",
+            column_label="Sweep",
+            row_label="Vgs [V]",
+            column=["forward", "backward"],
+            row=[-0.5, 0.0, 0.5],
+            values=[[0.1, 0.2], [0.3, 0.4], [0.5, 0.6]],
+        )
+        da = table.to_dataarray()
+        np.testing.assert_array_equal(da.coords["column"].values, ["forward", "backward"])
+
+
+# ---------------------------------------------------------------------------
+# TableKeyValue.to_dict
+# ---------------------------------------------------------------------------
+
+class TestTableKeyValueToDict:
+    """to_dict conversion for TableKeyValue."""
+
+    def test_basic(self):
+        """to_dict returns a dict mapping column keys to values."""
+        t = TableKeyValue(
+            title="Model Params",
+            column=["GateWidth [um]", "GateLength [um]"],
+            value=[100.0, 1.0],
+        )
+        assert t.to_dict() == {"GateWidth [um]": 100.0, "GateLength [um]": 1.0}
+
+    def test_none_value(self):
+        """None values are preserved in the dict."""
+        t = TableKeyValue(
+            title="Model Params",
+            column=["GateWidth [um]", "GateLength [um]"],
+            value=[None, None],
+        )
+        assert t.to_dict() == {"GateWidth [um]": None, "GateLength [um]": None}
+
+    def test_str_values(self):
+        """str values (as returned by reader) are preserved."""
+        t = TableKeyValue(
+            title="Model Params",
+            column=["GateWidth [um]", "GateLength [um]"],
+            value=["100.0", "1.0"],
+        )
+        d = t.to_dict()
+        assert d["GateWidth [um]"] == "100.0"
